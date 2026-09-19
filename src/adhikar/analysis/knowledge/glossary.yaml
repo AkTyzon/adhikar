@@ -1,0 +1,95 @@
+# Legal vocabulary: plain-language equivalents and search synonyms.
+#
+# Serves two purposes from one source of truth.
+#
+# 1. Query expansion. A reader asks about "payment terms"; the contract says
+#    "Fees" and "remuneration". Lexical retrieval fails on that gap, and the gap
+#    is the whole reason legal documents are hard to navigate -- so closing it is
+#    part of the product, not a search optimisation.
+#
+# 2. The on-page glossary. Terms appearing in a document are explained inline,
+#    which is what lets someone read their own contract rather than a summary
+#    of it.
+
+version: 1
+
+terms:
+  - term: indemnify
+    plain: cover someone else's losses, including their legal costs
+    synonyms: [indemnity, indemnification, hold harmless, defend]
+
+  - term: liability
+    plain: legal responsibility to pay for damage or loss
+    synonyms: [liable, damages, loss, responsibility]
+
+  - term: payment terms
+    plain: when money is due and what happens if it is late
+    synonyms: [fees, invoice, payable, remuneration, consideration, charges, pay, payment]
+
+  - term: termination
+    plain: ending the contract before it would otherwise finish
+    synonyms: [terminate, cancel, cancellation, end, expiry, rescind]
+
+  - term: force majeure
+    plain: events outside anyone's control, like a flood or a war, that excuse performance
+    synonyms: [act of god, beyond reasonable control]
+
+  - term: confidentiality
+    plain: the duty to keep information secret
+    synonyms: [confidential, non-disclosure, nda, secrecy, proprietary]
+
+  - term: intellectual property
+    plain: ownership of things that were created, like designs, code or writing
+    synonyms: [ip, copyright, patent, trademark, invention, work product, deliverable]
+
+  - term: governing law
+    plain: which country's or state's law applies to the contract
+    synonyms: [jurisdiction, venue, applicable law, choice of law]
+
+  - term: arbitration
+    plain: settling a dispute privately instead of in court
+    synonyms: [arbitrator, arbitral, tribunal, dispute resolution, mediation]
+
+  - term: assignment
+    plain: transferring your rights or duties under the contract to someone else
+    synonyms: [assign, transfer, novation, novate]
+
+  - term: warranty
+    plain: a promise that something is true, which you can be held to
+    synonyms: [warrant, represent, representation, guarantee]
+
+  - term: auto-renewal
+    plain: the contract renewing itself unless you cancel in time
+    synonyms: [renew, renewal, evergreen, extend, successive terms]
+
+  - term: notice period
+    plain: how much warning you must give before doing something
+    synonyms: [notice, notify, written notice, prior notice]
+
+  - term: non-compete
+    plain: a limit on working with competitors after the contract ends
+    synonyms: [restraint of trade, non-solicitation, non-solicit, restrictive covenant]
+
+  - term: data protection
+    plain: rules about handling people's personal information
+    synonyms: [personal data, privacy, gdpr, dpdp, processor, controller, data breach]
+
+  - term: consequential loss
+    plain: knock-on losses, such as profits you did not make because of a problem
+    synonyms: [indirect loss, incidental damages, special damages, loss of profit]
+
+  - term: cure period
+    plain: time allowed to fix a problem before the other side can act on it
+    synonyms: [remedy period, grace period, cure, remedy]
+
+  - term: severability
+    plain: if one part of the contract is invalid, the rest still applies
+    synonyms: [severable, severed, unenforceable provision]
+
+  - term: entire agreement
+    plain: this document replaces anything discussed or agreed before it
+    synonyms: [whole agreement, merger clause, integration clause, supersedes]
+
+  - term: limitation of liability
+    plain: a cap on how much one side can be made to pay
+    synonyms: [liability cap, aggregate liability, maximum liability, capped]

@@ -1,0 +1,49 @@
+# Clause segmentation patterns.
+#
+# Contracts are not free prose: they are numbered trees. Splitting on that
+# numbering rather than on sentences or a fixed token window is what makes a
+# citation land on "clause 7.2" instead of "characters 4,100-4,600", and it is
+# why a risk finding can name the clause it came from.
+#
+# Patterns are tried in order; the first that matches a line wins. Each must
+# anchor at line start and capture the heading label in group 1.
+
+version: 1
+
+heading_patterns:
+  - id: decimal_numbered
+    pattern: '^\s*(\d+(?:\.\d+){0,4})\.?\s+(?=[A-Z"“(])'
+    depth_from: dots
+    description: "1.  /  4.2  /  7.3.1 followed by a capitalised heading or text"
+
+  - id: article_section
+    pattern: '^\s*((?:ARTICLE|Article|SECTION|Section|CLAUSE|Clause|SCHEDULE|Schedule|ANNEXURE|Annexure|APPENDIX|Appendix|EXHIBIT|Exhibit)\s+[IVXLC\d]+(?:\.\d+)*)\b'
+    depth_from: fixed
+    depth: 0
+    description: Article III / Section 4 / Schedule 2
+
+  - id: lettered
+    pattern: '^\s*\(([a-z]|[ivx]{1,4})\)\s+(?=\S)'
+    depth_from: fixed
+    depth: 2
+    description: (a) / (b) / (iv) sub-clauses
+
+  - id: recital
+    pattern: '^\s*(WHEREAS|NOW THEREFORE|IN WITNESS WHEREOF|RECITALS?|PREAMBLE)\b'
+    depth_from: fixed
+    depth: 0
+    description: Recital and execution blocks
+
+  - id: allcaps_heading
+    pattern: '^\s*([A-Z][A-Z –\-&/'']{6,60})\s*$'
+    depth_from: fixed
+    depth: 0
+    description: A standalone heading in capitals
+
+# Segments shorter than this are merged into the preceding clause: a heading on
+# its own line is part of the clause it introduces, not a clause of its own.
+min_clause_chars: 40
+
+# A clause longer than this is split at paragraph boundaries, because a single
+# 8,000-character block defeats the purpose of clause-level citation.
+max_clause_chars: 4000

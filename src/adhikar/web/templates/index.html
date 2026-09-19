@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Adhikar — understand your legal documents{% endblock %}
+
+{% block content %}
+<div class="hero">
+  <h1>Understand what you are about to sign</h1>
+  <p class="lede">
+    Upload a contract, policy or agreement. Adhikar finds the clauses that carry
+    risk, extracts every deadline, and answers your questions — showing you the
+    exact words in your own document behind every statement it makes.
+  </p>
+</div>
+
+{% if errors %}
+<!-- Error summary: focused on render, links to the field that failed. This is
+     the pattern assistive technology users rely on to recover from a form error. -->
+<div class="error-summary" role="alert" tabindex="-1" id="error-summary">
+  <h2 class="error-summary__title">There is a problem</h2>
+  <ul class="error-summary__list">
+    {% for error in errors %}
+    <li><a href="#{{ error.field }}">{{ error.message }}</a></li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+<section class="card" aria-labelledby="upload-heading">
+  <h2 id="upload-heading">Choose a document</h2>
+  <form method="post" action="/documents" enctype="multipart/form-data" class="upload-form">
+    <div class="field">
+      <label for="file" class="field__label">Document file</label>
+      <p class="field__hint" id="file-hint">
+        PDF, Word (.docx) or plain text, up to {{ max_mb }}&nbsp;MB.
+        Your document stays in memory and is never saved to disk.
+      </p>
+      <input
+        type="file" id="file" name="file" required
+        accept=".pdf,.docx,.txt,application/pdf,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        aria-describedby="file-hint{% if errors %} file-error{% endif %}"
+        {% if errors %}aria-invalid="true"{% endif %}>
+      {% if errors %}
+      <p class="field__error" id="file-error">
+        <span class="visually-hidden">Error:</span> {{ errors[0].message }}
+      </p>
+      {% endif %}
+    </div>
+    <button type="submit" class="button button--primary">Analyse document</button>
+    <p class="form-status" role="status" data-upload-status></p>
+  </form>
+</section>
+
+<section class="card" aria-labelledby="difference-heading">
+  <h2 id="difference-heading">Why not just paste it into a chatbot?</h2>
+  <p>
+    You can, and it will answer you fluently. The difference is what happens to an
+    answer that is wrong.
+  </p>
+  <dl class="difference-list">
+    <div class="difference">
+      <dt>A chatbot's citation is a claim. Ours is checked.</dt>
+      <dd>
+        Every statement here must quote your document. The quote is located in the
+        file and hashed; a statement whose evidence does not exist is removed
+        before you see it, and listed separately so you know it was removed.
+      </dd>
+    </div>
+    <div class="difference">
+      <dt>A contract can attack the reader.</dt>
+      <dd>
+        Text can be hidden in a PDF — white on white, a fraction of a point tall,
+        or off the edge of the page — telling an AI to report no problems. Adhikar
+        treats your document as data, never as instructions, and shows you where
+        hidden text was found.
+      </dd>
+    </div>
+    <div class="difference">
+      <dt>"Unlimited liability" only means something against a norm.</dt>
+      <dd>
+        Clauses are compared against what a balanced version of the same clause
+        usually says, so you see how yours differs — not just what it contains.
+      </dd>
+    </div>
+    <div class="difference">
+      <dt>Deadlines are calculated, not guessed.</dt>
+      <dd>
+        Dates are computed in code from the periods your document states. Where the
+        document never says when something happened, Adhikar says so instead of
+        inventing a date.
+      </dd>
+    </div>
+    <div class="difference">
+      <dt>Your document does not leave the machine unless you let it.</dt>
+      <dd>
+        Personal details are replaced before any analysis runs, nothing is written
+        to disk, and the whole system runs without an internet connection.
+      </dd>
+    </div>
+  </dl>
+</section>
+{% endblock %}

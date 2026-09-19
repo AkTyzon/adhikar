@@ -1,0 +1,26 @@
+# Local development. Production deployment needs a real database URL and a
+# reverse proxy terminating TLS; see docs/DEPLOYMENT.md.
+services:
+  adhikar:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      # Development posture: SQLite is allowed and the interactive API docs are
+      # served. The production validator in config.py refuses both.
+      ADHIKAR_ENVIRONMENT: development
+      ADHIKAR_DATABASE_URL: sqlite+aiosqlite:///./adhikar.db
+      # Unset means the offline engine is selected automatically.
+      ADHIKAR_ANTHROPIC_API_KEY: ${ADHIKAR_ANTHROPIC_API_KEY:-}
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

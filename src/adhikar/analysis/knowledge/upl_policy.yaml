@@ -1,0 +1,101 @@
+# Scope-of-assistance policy.
+#
+# The problem statement is explicit: provide information and assistance, not
+# professional legal advice. Treating that as a disclaimer pasted under the
+# output is not a control -- the model can still have produced advice above it.
+#
+# Here it is a routing decision. A question's intent selects a response mode, and
+# the response mode selects the *output schema* the generator must satisfy. The
+# advisory modes have no field in which a recommendation could be returned, so
+# the boundary holds even if a prompt is ignored or successfully injected.
+#
+# Intents
+#   information     "What does clause 7 say?"       -> answer from the document
+#   interpretation  "What does 'indemnify' mean?"   -> explain, still document-bound
+#   advice          "Should I sign this?"           -> inform + prepare for a lawyer
+#   prediction      "Will I win if I sue?"          -> outside scope entirely
+#   representation  "Draft a legal notice for me"   -> outside scope entirely
+
+version: 1
+
+default_intent: information
+
+# Evaluated in order; the first match wins, so order is the precedence rule.
+# The modes that refuse a question outright come first: a question that reads as
+# both a request for advice and a request for a prediction is a prediction, and
+# must be referred out rather than partially answered.
+intents:
+  - id: representation
+    mode: refer_out
+    patterns:
+      - '\b(?:draft|write|prepare|file)\b.{0,30}\b(?:legal notice|petition|plaint|affidavit|lawsuit|complaint|appeal)\b'
+      - '\brepresent me\b'
+      - '\bbe my (?:lawyer|advocate|attorney|counsel)\b'
+      - '\bsign (?:this|it) (?:on my behalf|for me)\b'
+  - id: prediction
+    mode: refer_out
+    patterns:
+      - '\bwill I win\b'
+      - '\b(?:what|how) (?:are|were) (?:my|the) (?:chances|odds|likelihood)\b'
+      - '\bwould (?:a|the) (?:court|judge|tribunal|arbitrator)\b'
+      - '\b(?:can|could|will) (?:I|we|they) (?:sue|be sued|be prosecuted)\b'
+      - '\bhow much (?:compensation|damages|settlement)\b'
+
+  - id: advice
+    mode: inform_and_prepare
+    patterns:
+      - '\bshould I\b'
+      - '\b(?:do|would) you (?:recommend|suggest|advise)\b'
+      - '\bwhat (?:should|must|do) I do\b'
+      - '\bis (?:it|this) (?:safe|wise|a good idea|advisable)\b'
+      - '\b(?:can|may) I (?:legally|lawfully)\b'
+      - '\bam I (?:allowed|entitled|liable|obligated|required)\b'
+      - '\bis this (?:contract|agreement|clause) (?:good|bad|fair|enforceable|valid|legal)\b'
+      - '\bwhat are my (?:rights|options)\b'
+
+  - id: interpretation
+    mode: explain
+    patterns:
+      - '\bwhat does\b.{0,30}\b(?:mean|imply|entail)\b'
+      - '\b(?:explain|clarify|simplify|paraphrase|in plain (?:english|language))\b'
+      - '\bwhat is (?:a|an|the)\b.{0,40}\bclause\b'
+
+
+# What each mode is permitted to produce. Enforced in code by selecting a
+# response schema; see adhikar.security.upl.ResponseMode.
+modes:
+  answer:
+    description: Answer the question from the document, with citations.
+    allows_claims: true
+    allows_recommendation: false
+    boundary_notice: null
+
+  explain:
+    description: Explain terminology and clause effect in plain language.
+    allows_claims: true
+    allows_recommendation: false
+    boundary_notice: >-
+      This explains what the document says. Whether it applies to your situation
+      is a question for a qualified lawyer.
+
+  inform_and_prepare:
+    description: >-
+      Surface what the document says on the subject, then help the reader take it
+      to a professional: the relevant clauses, what is at stake, and the specific
+      questions worth asking.
+    allows_claims: true
+    allows_recommendation: false
+    boundary_notice: >-
+      Adhikar cannot tell you what to do. What follows is what your document says
+      on this point, and the questions worth putting to a qualified lawyer.
+
+  refer_out:
+    description: >-
+      Decline the request, explain why it falls outside what a document-analysis
+      tool can responsibly answer, and point to the kind of help that fits.
+    allows_claims: false
+    allows_recommendation: false
+    boundary_notice: >-
+      Predicting how a court would rule, or acting for you, requires a licensed
+      professional who knows the full facts of your matter. Adhikar can only tell
+      you what your documents say.

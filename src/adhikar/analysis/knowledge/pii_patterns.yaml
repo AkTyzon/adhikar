@@ -1,0 +1,146 @@
+# PII detection catalogue.
+#
+# Loaded at runtime by adhikar.security.redaction. No pattern, keyword or
+# placeholder label appears in Python source: adding coverage for a new
+# jurisdiction is a data change, reviewable by someone who is not a programmer.
+#
+# Fields
+#   id                 stable identifier, also the audit-log key
+#   label              placeholder token stem, e.g. EMAIL -> [[EMAIL_1]]
+#   pattern            Python regex, matched case-insensitively unless noted
+#   validator          name from adhikar.security.checksums.VALIDATORS
+#   requires_context   match only counts if one of these appears within
+#                      context_window characters; kills false positives on
+#                      generically-shaped numbers
+#   sensitivity        high | medium | low - drives whether a value may ever be
+#                      sent to a remote model even in placeholder form
+#   description        shown in the redaction report in the UI
+
+version: 1
+
+patterns:
+  - id: email
+    label: EMAIL
+    pattern: '\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b'
+    validator: always
+    sensitivity: medium
+    description: Email address
+
+  - id: aadhaar
+    label: AADHAAR
+    pattern: '\b[2-9]\d{3}[\s-]?\d{4}[\s-]?\d{4}\b'
+    validator: verhoeff
+    sensitivity: high
+    description: Aadhaar number (India national identity)
+
+  - id: pan
+    label: PAN
+    pattern: '\b[A-Z]{5}\d{4}[A-Z]\b'
+    validator: pan
+    case_sensitive: true
+    sensitivity: high
+    description: Permanent Account Number (India tax identity)
+
+  - id: gstin
+    label: GSTIN
+    pattern: '\b\d{2}[A-Z]{5}\d{4}[A-Z][A-Z0-9][Zz][A-Z0-9]\b'
+    validator: gstin
+    case_sensitive: true
+    sensitivity: medium
+    description: GST identification number (India)
+
+  - id: credit_card
+    label: CARD
+    pattern: '\b(?:\d[ -]?){12,18}\d\b'
+    validator: luhn
+    sensitivity: high
+    description: Payment card number
+
+  - id: iban
+    label: IBAN
+    pattern: '\b[A-Z]{2}\d{2}[\sA-Z0-9]{11,30}\b'
+    validator: mod97
+    case_sensitive: true
+    sensitivity: high
+    description: International bank account number
+
+  - id: ifsc
+    label: IFSC
+    pattern: '\b[A-Z]{4}0[A-Z0-9]{6}\b'
+    validator: ifsc
+    case_sensitive: true
+    sensitivity: medium
+    description: Indian Financial System Code (bank branch)
+
+  - id: bank_account
+    label: ACCOUNT
+    pattern: '\b\d{9,18}\b'
+    validator: always
+    requires_context: ['account', 'a/c', 'acct', 'bank', 'ifsc', 'branch']
+    context_window: 80
+    sensitivity: high
+    description: Bank account number
+
+  - id: ssn
+    label: SSN
+    pattern: '\b(?!000|666|9\d\d)\d{3}-(?!00)\d{2}-(?!0000)\d{4}\b'
+    validator: always
+    sensitivity: high
+    description: US Social Security number
+
+  - id: phone_india
+    label: PHONE
+    pattern: '(?:\+?91[\s-]?)?\b[6-9]\d{4}[\s-]?\d{5}\b'
+    validator: always
+    sensitivity: medium
+    description: Indian mobile number
+
+  - id: phone_intl
+    label: PHONE
+    pattern: '\+\d{1,3}[\s-]?\(?\d{2,4}\)?[\s-]?\d{3,4}[\s-]?\d{3,4}\b'
+    validator: always
+    sensitivity: medium
+    description: International telephone number
+
+  - id: passport_india
+    label: PASSPORT
+    pattern: '\b[A-PR-WY][1-9]\d\s?\d{4}[1-9]\b'
+    validator: always
+    requires_context: ['passport']
+    context_window: 60
+    case_sensitive: true
+    sensitivity: high
+    description: Indian passport number
+
+  - id: ip_address
+    label: IP
+    pattern: '\b(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\b'
+    validator: always
+    sensitivity: low
+    description: IPv4 address
+
+  - id: date_of_birth
+    label: DOB
+    pattern: '\b\d{1,2}[/-]\d{1,2}[/-](?:19|20)\d{2}\b'
+    validator: always
+    requires_context: ['born', 'birth', 'dob', 'd.o.b', 'date of birth']
+    context_window: 60
+    sensitivity: high
+    description: Date of birth
+
+  - id: person_titled
+    label: PERSON
+    pattern: '\b(?:Mr|Mrs|Ms|Miss|Dr|Shri|Smt|Prof)\.?\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2}'
+    validator: always
+    case_sensitive: true
+    sensitivity: medium
+    description: Personal name introduced by a title
+
+  - id: postal_address_india
+    label: PINCODE
+    pattern: '\b[1-9]\d{5}\b'
+    validator: always
+    requires_context: ['pin', 'pincode', 'postal', 'address', 'situated at', 'residing']
+    context_window: 100
+    sensitivity: low
+    description: Indian postal code

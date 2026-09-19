@@ -1,0 +1,123 @@
+# Prompt-injection signature catalogue.
+#
+# A contract is untrusted input. Anyone who can hand you a PDF can attempt to
+# steer the model that reads it -- and unlike a web page, a contract is a document
+# the user *wants* analysed, so "just don't process untrusted input" is not an
+# available answer.
+#
+# Weights are per-signal probabilities of malicious intent, combined with a
+# noisy-OR in adhikar.security.injection. They are calibrated so that no single
+# weak signal can quarantine a document, while two or three strong ones will.
+#
+# Fields
+#   id          stable identifier, surfaced in the UI and the audit record
+#   category    grouping for the report
+#   pattern     Python regex (matched case-insensitively unless case_sensitive)
+#   weight      0.0-1.0 contribution to the document's injection score
+#   explanation shown to the user next to the highlighted span, in plain language
+
+version: 1
+
+signatures:
+  # ------------------------------------------------------ instruction override
+  - id: ignore_previous
+    category: instruction_override
+    pattern: '\b(?:ignore|disregard|forget|override)\b[^.\n]{0,40}\b(?:previous|prior|earlier|above|all|any)\b[^.\n]{0,30}\b(?:instruction|prompt|direction|rule|command|context)s?\b'
+    weight: 0.85
+    explanation: Text instructing an AI system to discard the instructions it was given.
+
+  - id: new_instructions
+    category: instruction_override
+    pattern: '\b(?:new|updated|revised|actual|real)\s+(?:instruction|directive|system\s+prompt|task)s?\s*:'
+    weight: 0.7
+    explanation: Text presenting itself as a replacement set of instructions.
+
+  - id: you_are_now
+    category: instruction_override
+    pattern: '\byou\s+are\s+now\b|\bfrom\s+now\s+on\s*,?\s+you\b|\bact\s+as\s+(?:a|an|if)\b'
+    weight: 0.6
+    explanation: Text attempting to reassign the AI system''s role.
+
+  - id: developer_mode
+    category: instruction_override
+    pattern: '\b(?:developer|debug|god|admin|dan)\s+mode\b|\bjailbreak\b|\bunrestricted\s+mode\b'
+    weight: 0.75
+    explanation: Reference to a fictitious privileged mode, a common jailbreak framing.
+
+  # ------------------------------------------------------------ role mimicry
+  - id: chat_role_token
+    category: role_mimicry
+    pattern: '<\|(?:im_start|im_end|system|user|assistant|endoftext)\|>'
+    weight: 0.9
+    explanation: Chat-template control tokens embedded in document text.
+
+  - id: role_prefix
+    category: role_mimicry
+    pattern: '^\s*(?:system|assistant|human|user)\s*:\s*\S'
+    multiline: true
+    weight: 0.45
+    explanation: A line formatted as a conversation turn rather than contract prose.
+
+  - id: fake_system_tag
+    category: role_mimicry
+    pattern: '</?(?:system|instructions?|prompt|admin)>'
+    weight: 0.7
+    explanation: Markup imitating a system-instruction boundary.
+
+  # -------------------------------------------------------- delimiter escape
+  - id: closing_document_tag
+    category: delimiter_escape
+    pattern: '</(?:document|untrusted_document|context|user_input|data)>'
+    weight: 0.8
+    explanation: A closing tag that tries to end the quoted-document block early.
+
+  - id: fence_break
+    category: delimiter_escape
+    pattern: '(?:```|""")\s*(?:end|stop)\s*(?:of\s+)?(?:document|context|input)'
+    weight: 0.6
+    explanation: Markup attempting to terminate the document block.
+
+  # ----------------------------------------------------- output manipulation
+  - id: verdict_steering
+    category: output_manipulation
+    pattern: '\b(?:report|classify|mark|state|say|conclude|rate)\b[^.\n]{0,40}\b(?:no\s+risk|zero\s+risk|safe|standard|fair|balanced|favourable|favorable|low\s+risk)\b'
+    weight: 0.8
+    explanation: Text instructing the analysis to reach a predetermined conclusion.
+
+  - id: suppress_findings
+    category: output_manipulation
+    pattern: '\b(?:do\s+not|don''t|never|avoid)\b[^.\n]{0,40}\b(?:mention|flag|report|disclose|highlight|warn|reveal|summarise|summarize)\b'
+    weight: 0.8
+    explanation: Text instructing the analysis to conceal something from the reader.
+
+  - id: hidden_from_user
+    category: output_manipulation
+    pattern: '\b(?:hidden|invisible|not\s+visible|only\s+the\s+(?:ai|assistant|model))\b[^.\n]{0,30}\b(?:user|reader|human)\b'
+    weight: 0.7
+    explanation: Text referring to content concealed from the human reader.
+
+  # ------------------------------------------------------------ exfiltration
+  - id: reveal_prompt
+    category: exfiltration
+    pattern: '\b(?:reveal|show|print|repeat|output|disclose)\b[^.\n]{0,30}\b(?:system\s+prompt|instructions|your\s+rules|configuration|api\s+key)\b'
+    weight: 0.85
+    explanation: Text attempting to extract the system''s own configuration.
+
+  - id: exfil_url
+    category: exfiltration
+    pattern: '\b(?:send|post|transmit|upload|forward|report)\b[^.\n]{0,30}https?://'
+    weight: 0.8
+    explanation: Text instructing the system to transmit data to an external address.
+
+  # -------------------------------------------------------- tool invocation
+  - id: tool_call_markup
+    category: tool_invocation
+    pattern: '<(?:tool_use|function_call|invoke|antml:invoke)\b|"tool_calls"\s*:'
+    weight: 0.85
+    explanation: Markup imitating a tool or function call.
+
+  - id: code_execution_request
+    category: tool_invocation
+    pattern: '\b(?:execute|run|eval)\b[^.\n]{0,25}\b(?:the\s+following|this)\b[^.\n]{0,25}\b(?:code|script|command|python|bash|shell)\b'
+    weight: 0.7
+    explanation: Text requesting execution of embedded code.

@@ -1,0 +1,169 @@
+name: CI
+
+# Runs on every push and pull request. The entire suite runs with no API key:
+# the offline engine is a real implementation, not a stub, so a fork with no
+# secrets gets identical results.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FORCE_COLOR: "1"
+
+jobs:
+  quality:
+    name: Lint, types and tests
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Install project
+        run: uv pip install --system -e ".[dev,anthropic]"
+
+      - name: Lint
+        run: ruff check --output-format=github .
+
+      - name: Check formatting
+        run: ruff format --check .
+
+      - name: Type check
+        run: mypy
+
+      - name: Test
+        # Coverage gate (85%) is configured in pyproject.toml and fails the build.
+        run: pytest --cov --cov-report=term-missing --cov-report=xml
+
+      - name: Upload coverage
+        if: matrix.python-version == '3.12'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.xml
+          retention-days: 7
+
+  security:
+    name: Security scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install project
+        run: |
+          uv python install 3.12
+          uv pip install --system -e ".[dev,anthropic]"
+
+      - name: Static analysis (bandit)
+        run: bandit -c pyproject.toml -r src/ -ll
+
+      - name: Dependency audit (pip-audit)
+        run: pip-audit --skip-editable
+
+      - name: Assert no secrets are committed
+        # Cheap, specific check: the shapes of the credentials this project uses.
+        run: |
+          if git grep -nIE 'sk-ant-[a-zA-Z0-9]{20,}' -- ':!*.yml' ':!*.md'; then
+            echo "::error::A live-looking Anthropic API key is present in the tree"
+            exit 1
+          fi
+          echo "No credential-shaped strings found."
+
+      - name: Assert no literal control characters in source
+        # A source file containing real bidirectional or zero-width characters is
+        # a Trojan Source hazard. The injection module names them as codepoints.
+        run: |
+          python - <<'PY'
+          import pathlib, sys
+          suspect = {0x202A, 0x202B, 0x202C, 0x202D, 0x202E, 0x2066, 0x2069, 0x200B, 0x200D}
+          bad = []
+          for path in pathlib.Path("src").rglob("*.py"):
+              text = path.read_text(encoding="utf-8")
+              for index, char in enumerate(text):
+                  if ord(char) in suspect:
+                      bad.append(f"{path}:{text[:index].count(chr(10)) + 1} U+{ord(char):04X}")
+          if bad:
+              print("::error::Literal control characters in source:")
+              print("\n".join(bad))
+              sys.exit(1)
+          print("No literal control characters in source.")
+          PY
+
+  adversarial:
+    name: Adversarial fixtures
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install project
+        run: |
+          uv python install 3.12
+          uv pip install --system -e ".[dev]"
+
+      - name: Generate adversarial fixtures
+        run: python scripts/make_fixtures.py
+
+      - name: Assert every poisoned document is caught
+        # A regression here means a hidden instruction would reach the model.
+        run: python scripts/verify_defences.py
+
+      - name: Run the injection demonstration
+        run: python scripts/demo_injection.py
+
+  docker:
+    name: Container build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t adhikar:ci .
+
+      - name: Verify it starts and serves
+        run: |
+          docker run -d --name adhikar -p 8000:8000 adhikar:ci
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8000/api/health > /dev/null; then
+              curl -fsS http://127.0.0.1:8000/api/health
+              docker rm -f adhikar
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::Container did not become healthy"
+          docker logs adhikar
+          exit 1
+
+      - name: Check image size
+        run: |
+          size=$(docker image inspect adhikar:ci --format '{{.Size}}')
+          echo "Image size: $((size / 1024 / 1024)) MB"
