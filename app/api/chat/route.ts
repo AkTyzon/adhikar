@@ -72,7 +72,6 @@ export async function POST(request: Request): Promise<Response> {
     const stream = await streamCompletion(provider, {
       system: buildChatSystemPrompt(languageCode),
       user: question.trim(),
-      signal: request.signal,
     });
 
     return new Response(stream, {

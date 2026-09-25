@@ -210,13 +210,46 @@ cp .env.example .env.local
 
 | Variable | Effect |
 | --- | --- |
-| `GOOGLE_GENERATIVE_AI_API_KEY` | Use Gemini (checked first) |
+| `ADHIKAR_LOCAL_MODEL` | **On-device** via Ollama or any OpenAI-compatible server. Takes priority. |
+| `ADHIKAR_LOCAL_BASE_URL` | Defaults to Ollama (`http://127.0.0.1:11434/v1`) |
+| `GOOGLE_GENERATIVE_AI_API_KEY` | Use Gemini |
 | `OPENAI_API_KEY` | Use OpenAI |
 | `ANTHROPIC_API_KEY` | Use Claude |
-| `ADHIKAR_MODEL` | Override the default model for the chosen provider |
+| `ADHIKAR_MODEL` | Override the model for the chosen cloud provider |
 
 None set → scenario cards serve pre-written answers; free-text questions explain
-that no model is configured. Document analysis requires a key and says so.
+that no model is configured. The interface always states which model is
+answering, so a pre-written answer can never be mistaken for a tailored one.
+
+### Running entirely on-device
+
+```bash
+ollama pull qwen3:8b
+echo 'ADHIKAR_LOCAL_MODEL=qwen3:8b' >> .env.local
+npm run dev
+```
+
+Nothing leaves the machine — the strongest privacy posture available for someone
+uploading a tenancy agreement or a legal notice, which is why a local model
+**outranks** any cloud key found in the environment.
+
+Two things were learned making this work, both encoded in the code and its tests:
+
+- **A reasoning model may never reach its answer.** On qwen3:8b via Ollama, with
+  thinking enabled a 250-token budget went *entirely* into the `reasoning` field
+  and produced **zero** content tokens. `reasoning_effort: "none"` is therefore
+  sent by default, and the same question then answered in nine seconds.
+- **One wall-clock timeout is the wrong shape.** A local 8B model streams a long
+  structured answer over minutes; a 60-second ceiling aborted healthy
+  generations. Timeouts are now split into a first-byte budget and an
+  *inactivity* budget, so a slow-but-live stream finishes and only a genuinely
+  hung one is dropped.
+
+Local models also make the citation verifier earn its place. Asked about a
+withheld deposit, qwen3:8b cited "Section 107 of the Model Tenancy Act" and
+"Section 13 of the Legal Services Authorities Act". Both are inventions — the
+real provisions are s.11 and s.12 — and both were flagged **unverified** rather
+than rendered as confident links to a government archive.
 
 ## Limitations
 

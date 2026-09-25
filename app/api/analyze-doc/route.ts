@@ -87,7 +87,6 @@ export async function POST(request: Request): Promise<Response> {
       system: buildDocumentSystemPrompt(languageCode),
       user: buildDocumentUserPrompt(documentText.replaceAll(fence, "[removed]"), userQuestion, fence),
       maxTokens: 6_000,
-      signal: request.signal,
     });
 
     return new Response(stream, {
