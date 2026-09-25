@@ -222,7 +222,13 @@ export function matchScenario(question: string): Scenario | undefined {
     ["train-seat", ["train", "railway", "berth", "seat", "coach", "irctc", "pnr", "reserved"]],
     ["tenant-deposit", ["landlord", "deposit", "rent", "tenant", "vacat", "flat", "lease"]],
     ["upi-fraud", ["upi", "scam", "fraud", "cyber", "phish", "otp", "transaction", "bank", "money lost", "paytm", "gpay"]],
-    ["unpaid-salary", ["salary", "wage", "employer", "paid", "boss", "pf", "notice period", "epf"]],
+    [
+      "unpaid-salary",
+      // "notice period" was here and pulled in resignation questions, which this
+      // answer does not address -- an employment-shaped question is not the same
+      // as an unpaid-wages question, and the wrong answer is worse than none.
+      ["salary", "wage", "unpaid", "employer", "boss", "epf", "provident fund"],
+    ],
   ];
 
   let best: { id: string; hits: number } | undefined;

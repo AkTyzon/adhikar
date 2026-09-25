@@ -67,7 +67,7 @@ export function resolveProvider(env: NodeJS.ProcessEnv = process.env): ProviderC
     return {
       id: "anthropic",
       label: "Anthropic Claude",
-      model: env.ADHIKAR_MODEL ?? "claude-sonnet-4-5",
+      model: env.ADHIKAR_MODEL ?? "claude-opus-5",
       apiKey: env.ANTHROPIC_API_KEY,
     };
   }

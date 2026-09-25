@@ -14,8 +14,6 @@ import { isLanguageCode } from "@/lib/languages";
 import { ProviderError, resolveProvider, streamCompletion } from "@/lib/llm";
 import { RateLimiter, clientKey } from "@/lib/rate-limit";
 
-export const runtime = "nodejs";
-
 /** Roughly 30 pages of dense text. Beyond this the answer degrades anyway. */
 const MAX_DOCUMENT_CHARS = 120_000;
 const MIN_DOCUMENT_CHARS = 200;

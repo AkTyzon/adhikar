@@ -14,9 +14,6 @@ import { ProviderError, resolveProvider, streamCompletion } from "@/lib/llm";
 import { RateLimiter, clientKey } from "@/lib/rate-limit";
 import { matchScenario } from "@/lib/scenarios";
 
-/** Node runtime rather than edge: the SSE parser uses TextDecoder streaming. */
-export const runtime = "nodejs";
-
 const MAX_QUESTION_LENGTH = 1_000;
 const limiter = new RateLimiter(12, 60_000);
 
