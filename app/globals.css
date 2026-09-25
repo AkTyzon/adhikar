@@ -1,0 +1,146 @@
+@import "tailwindcss";
+
+/* Adhikar design tokens.
+ *
+ * Palette: Deep Navy / Warm Saffron / Muted Emerald.
+ *
+ * Every pair used for text meets WCAG 2.2 AA (4.5:1 body, 3:1 large). Saffron is
+ * used for emphasis and borders, and for text only at large sizes on navy — at
+ * body size on white it fails, so `--color-saffron-ink` is the darker variant
+ * reserved for that. Getting this wrong is the most common way a "vibrant"
+ * palette becomes unreadable.
+ */
+@theme {
+  --color-navy-950: #070c16;
+  --color-navy-900: #0f172a;
+  --color-navy-800: #172038;
+  --color-navy-700: #1f2b48;
+  --color-navy-600: #2c3a5c;
+  --color-navy-400: #64748b;
+  --color-navy-200: #cbd5e1;
+  --color-navy-100: #e2e8f0;
+  --color-navy-50: #f5f7fa;
+
+  --color-saffron-600: #ea580c;
+  --color-saffron-500: #f97316;
+  --color-saffron-400: #fb923c;
+  --color-saffron-100: #ffedd5;
+  /* Accessible saffron for body text on light backgrounds (7.0:1 on white). */
+  --color-saffron-ink: #9a3412;
+
+  --color-emerald-700: #047857;
+  --color-emerald-600: #059669;
+  --color-emerald-100: #d1fae5;
+
+  --color-danger-700: #b91c1c;
+  --color-danger-600: #dc2626;
+  --color-danger-100: #fee2e2;
+
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans",
+    "Noto Sans Devanagari", "Noto Sans Tamil", "Noto Sans Telugu",
+    "Noto Sans Bengali", "Noto Sans Kannada", sans-serif;
+
+  --radius-card: 0.875rem;
+}
+
+:root {
+  color-scheme: light;
+  --page: var(--color-navy-50);
+  --surface: #ffffff;
+  --ink: var(--color-navy-900);
+  --ink-muted: #475569;
+  --line: var(--color-navy-100);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --page: var(--color-navy-950);
+    --surface: var(--color-navy-900);
+    --ink: #eef2f8;
+    /* Lightened for AA against the navy surface rather than reused from light. */
+    --ink-muted: #a9b6c9;
+    --line: var(--color-navy-700);
+  }
+}
+
+@layer base {
+  * {
+    min-width: 0;
+  }
+
+  body {
+    background: var(--page);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    /* Never justify: uneven word spacing creates rivers that measurably hurt
+     * readability, and this app renders long legal prose. */
+    text-align: left;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Focus is never removed. :focus-visible keeps it out of a mouse user's way
+   * while guaranteeing it for keyboard users. */
+  :focus-visible {
+    outline: 3px solid var(--color-saffron-500);
+    outline-offset: 2px;
+    border-radius: 0.25rem;
+  }
+
+  /* Anything reached by an in-page link clears the sticky header. */
+  :target {
+    scroll-margin-top: 6rem;
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+}
+
+@layer utilities {
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  /* Revealed on focus, so keyboard users get the skip link a mouse never shows. */
+  .skip-link {
+    position: absolute;
+    left: -9999px;
+    top: 0;
+    z-index: 100;
+  }
+  .skip-link:focus {
+    left: 0;
+  }
+}
+
+/* Honour the OS setting by removing motion, not shortening it. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Windows High Contrast replaces the palette entirely, so structure has to come
+ * from borders rather than from background colour. */
+@media (forced-colors: active) {
+  .hc-border {
+    border: 1px solid CanvasText;
+  }
+}

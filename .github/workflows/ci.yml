@@ -1,11 +1,10 @@
 name: CI
 
-# Runs on every push and pull request. The entire suite runs with no API key:
-# the offline engine is a real implementation, not a stub, so a fork with no
-# secrets gets identical results.
+# Runs with no API keys. The scenario answers and the citation verifier are real
+# implementations, not stubs, so a fork with no secrets gets identical results.
 on:
   push:
-    branches: [main]
+    branches: [main, v2]
   pull_request:
 
 permissions:
@@ -15,155 +14,76 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  FORCE_COLOR: "1"
-
 jobs:
   quality:
-    name: Lint, types and tests
+    name: Types, lint, tests, build
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.12", "3.13"]
+        node-version: ["20.x", "22.x"]
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-node@v4
         with:
-          enable-cache: true
+          node-version: ${{ matrix.node-version }}
+          cache: npm
 
-      - name: Set up Python ${{ matrix.python-version }}
-        run: uv python install ${{ matrix.python-version }}
-
-      - name: Install project
-        run: uv pip install --system -e ".[dev,anthropic]"
-
-      - name: Lint
-        run: ruff check --output-format=github .
-
-      - name: Check formatting
-        run: ruff format --check .
+      - run: npm ci
 
       - name: Type check
-        run: mypy
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
 
       - name: Test
-        # Coverage gate (85%) is configured in pyproject.toml and fails the build.
-        run: pytest --cov --cov-report=term-missing --cov-report=xml
+        run: npm test
 
-      - name: Upload coverage
-        if: matrix.python-version == '3.12'
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage
-          path: coverage.xml
-          retention-days: 7
+      - name: Build
+        run: npm run build
 
   security:
-    name: Security scan
+    name: Security
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-node@v4
         with:
-          enable-cache: true
+          node-version: 22.x
+          cache: npm
+      - run: npm ci
 
-      - name: Install project
-        run: |
-          uv python install 3.12
-          uv pip install --system -e ".[dev,anthropic]"
-
-      - name: Static analysis (bandit)
-        run: bandit -c pyproject.toml -r src/ -ll
-
-      - name: Dependency audit (pip-audit)
-        run: pip-audit --skip-editable
+      - name: Dependency audit
+        # The Vercel AI SDK was removed to reach zero; this keeps it there.
+        run: npm audit --audit-level=moderate
 
       - name: Assert no secrets are committed
-        # Cheap, specific check: the shapes of the credentials this project uses.
         run: |
-          if git grep -nIE 'sk-ant-[a-zA-Z0-9]{20,}' -- ':!*.yml' ':!*.md'; then
-            echo "::error::A live-looking Anthropic API key is present in the tree"
+          if git grep -nIE '(sk-ant-[A-Za-z0-9]{20,}|sk-proj-[A-Za-z0-9]{20,}|AIza[0-9A-Za-z_-]{30,})' \
+               -- ':!*.md' ':!.env.example'; then
+            echo "::error::A credential-shaped string is present in the tree"
             exit 1
           fi
           echo "No credential-shaped strings found."
 
-      - name: Assert no literal control characters in source
-        # A source file containing real bidirectional or zero-width characters is
-        # a Trojan Source hazard. The injection module names them as codepoints.
+      - name: Assert API keys never reach the client bundle
+        # A key read in a client component would be inlined into JavaScript served
+        # to every visitor. This is the check that would catch it.
         run: |
-          python - <<'PY'
-          import pathlib, sys
-          suspect = {0x202A, 0x202B, 0x202C, 0x202D, 0x202E, 0x2066, 0x2069, 0x200B, 0x200D}
-          bad = []
-          for path in pathlib.Path("src").rglob("*.py"):
-              text = path.read_text(encoding="utf-8")
-              for index, char in enumerate(text):
-                  if ord(char) in suspect:
-                      bad.append(f"{path}:{text[:index].count(chr(10)) + 1} U+{ord(char):04X}")
-          if bad:
-              print("::error::Literal control characters in source:")
-              print("\n".join(bad))
-              sys.exit(1)
-          print("No literal control characters in source.")
-          PY
+          npm run build
+          if grep -rlE 'GOOGLE_GENERATIVE_AI_API_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY' .next/static 2>/dev/null; then
+            echo "::error::An API key name appears in the client bundle"
+            exit 1
+          fi
+          echo "No provider key names in the client bundle."
 
-  adversarial:
-    name: Adversarial fixtures
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
-
-      - name: Install project
+      - name: Assert dangerouslySetInnerHTML is absent
         run: |
-          uv python install 3.12
-          uv pip install --system -e ".[dev]"
-
-      - name: Generate adversarial fixtures
-        run: python scripts/make_fixtures.py
-
-      - name: Assert every poisoned document is caught
-        # A regression here means a hidden instruction would reach the model.
-        run: python scripts/verify_defences.py
-
-      - name: Run the injection demonstration
-        run: python scripts/demo_injection.py
-
-  docker:
-    name: Container build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Build image
-        run: docker build -t adhikar:ci .
-
-      - name: Verify it starts and serves
-        run: |
-          docker run -d --name adhikar -p 8000:8000 adhikar:ci
-          for _ in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:8000/api/health > /dev/null; then
-              curl -fsS http://127.0.0.1:8000/api/health
-              docker rm -f adhikar
-              exit 0
-            fi
-            sleep 1
-          done
-          echo "::error::Container did not become healthy"
-          docker logs adhikar
-          exit 1
-
-      - name: Check image size
-        run: |
-          size=$(docker image inspect adhikar:ci --format '{{.Size}}')
-          echo "Image size: $((size / 1024 / 1024)) MB"
+          if git grep -n 'dangerouslySetInnerHTML' -- 'app' 'components' 'lib'; then
+            echo "::error::dangerouslySetInnerHTML found; this app renders untrusted text"
+            exit 1
+          fi
+          echo "No raw HTML injection points."
