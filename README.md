@@ -253,46 +253,55 @@ than rendered as confident links to a government archive.
 
 ## Deployment
 
-Containerised and ready for Cloud Run, the same way EcoVerse is hosted.
+### Free, no card required (recommended)
+
+```bash
+npx vercel --prod
+```
+
+Vercel's Hobby tier needs no payment method, is the native host for Next.js, and
+needs no configuration here — `maxDuration` is already declared on both API routes
+to sit inside its 60-second function ceiling, and Gemini's thinking is disabled by
+default partly to stay comfortably under it.
+
+Other card-free options: **Hugging Face Spaces** (Docker SDK — use the Dockerfile
+in this repo; a long-running container, so no per-request ceiling at all) and
+**Netlify**.
+
+### Google Cloud Run
+
+Cloud Run's free tier is generous, but it is a *discount on a billing-enabled
+project* rather than a way to run without billing attached. A project with no
+billing account cannot start a container at all, so Cloud Run needs a card on file
+even when the monthly bill is zero.
 
 ```bash
 PROJECT=your-project-id
-REGION=us-central1
-
 gcloud config set project $PROJECT
 gcloud services enable run.googleapis.com artifactregistry.googleapis.com cloudbuild.googleapis.com secretmanager.googleapis.com
 
-# Keep the key out of the image and out of the deploy command's history.
 printf '%s' "YOUR_GEMINI_KEY" | gcloud secrets create GEMINI_API_KEY --data-file=-
 gcloud projects add-iam-policy-binding $PROJECT \
   --member="serviceAccount:$(gcloud projects describe $PROJECT --format='value(projectNumber)')-compute@developer.gserviceaccount.com" \
   --role="roles/secretmanager.secretAccessor"
 
-# Builds from the Dockerfile in Cloud Build, so no local Docker is needed and the
+# --source builds from the Dockerfile in Cloud Build: no local Docker, and the
 # linux/amd64 cross-build is handled for you.
-gcloud run deploy adhikar \
-  --source . \
-  --region $REGION \
-  --allow-unauthenticated \
-  --set-secrets="GEMINI_API_KEY=GEMINI_API_KEY:latest" \
-  --memory=1Gi \
-  --cpu=1 \
-  --min-instances=0
+gcloud run deploy adhikar --source . --region us-central1 --allow-unauthenticated \
+  --set-secrets="GEMINI_API_KEY=GEMINI_API_KEY:latest" --memory=1Gi
+```
+
+### Locally
+
+```bash
+docker build -t adhikar . && docker run -p 8080:8080 adhikar
 ```
 
 The image is multi-stage, runs as an unprivileged user, carries no source or dev
-dependencies, and listens on Cloud Run's injected `PORT`.
+dependencies, and listens on the injected `PORT`.
 
-**A deployment does not need a key at all.** Without one the scenario cards still
-serve verified answers, and a visitor can supply their own key in the interface —
-which is the point of the bring-your-own-key panel.
-
-### Other hosts
-
-```bash
-npx vercel --prod          # native Next.js host, free tier
-docker build -t adhikar . && docker run -p 8080:8080 adhikar
-```
+**A deployment needs no API key at all.** Without one the scenario cards still
+serve verified answers, and a visitor can supply their own key in the interface.
 
 ## Limitations
 

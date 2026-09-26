@@ -104,6 +104,23 @@ const LOCAL_IDLE_TIMEOUT_MS = 180_000;
  */
 const DEFAULT_GEMINI_MODEL = "gemini-3.8-flash";
 
+/**
+ * Gemini 3.x reasons before answering, and bills and waits for those tokens.
+ *
+ * On a trivial prompt ("say only: ready") the response used 94 thought tokens out
+ * of 100 total, and a full structured legal answer took over three minutes
+ * end-to-end. That is the dominant cost here and it buys little: the task is
+ * retrieval and plain-language restatement against a fixed structure, not a
+ * problem needing deliberation -- and every claim is verified against the
+ * registry afterwards regardless.
+ *
+ * Turning it off also brings a response inside the per-request limits that
+ * free hosting tiers impose, which is what makes a no-cost deployment viable.
+ * Set ADHIKAR_GEMINI_THINKING=1 to restore it.
+ */
+const GEMINI_THINKING_CONFIG =
+  process.env.ADHIKAR_GEMINI_THINKING === "1" ? {} : { thinkingConfig: { thinkingBudget: 0 } };
+
 /** Default endpoint for Ollama's OpenAI-compatible API. */
 const DEFAULT_LOCAL_BASE_URL = "http://127.0.0.1:11434/v1";
 
@@ -242,7 +259,11 @@ export function buildEndpoint(provider: ProviderConfig, request: CompletionReque
         body: {
           systemInstruction: { parts: [{ text: request.system }] },
           contents: [{ role: "user", parts: [{ text: request.user }] }],
-          generationConfig: { maxOutputTokens: maxTokens, temperature: 0.3 },
+          generationConfig: {
+            maxOutputTokens: maxTokens,
+            temperature: 0.3,
+            ...GEMINI_THINKING_CONFIG,
+          },
         },
         extractDelta: (payload) => {
           const parts = (payload as GoogleChunk)?.candidates?.[0]?.content?.parts;
@@ -611,6 +632,7 @@ async function geminiWithoutStreaming(
       generationConfig: {
         maxOutputTokens: request.maxTokens ?? DEFAULT_MAX_TOKENS,
         temperature: 0.3,
+        ...GEMINI_THINKING_CONFIG,
       },
     }),
     signal: AbortSignal.timeout(provider.setupTimeoutMs ?? SETUP_TIMEOUT_MS),
