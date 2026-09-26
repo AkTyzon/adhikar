@@ -32,6 +32,44 @@ real product rather than an error state.
 
 ---
 
+## Judging guide — test everything in 90 seconds
+
+**Live: https://adhikar-eight.vercel.app** — no sign-up, no key needed.
+
+| # | Do this | What it proves |
+|---|---|---|
+| 1 | Click **UPI Fraud** | Full answer, and the *Sections cited* panel below it shows every reference **verified** against the registry, each linked to India Code |
+| 2 | Type *"my employer fired me without notice"* and press Ask | Live Gemini answer. Watch the citation panel: some sections come back **unverified** — that is the product working, not failing. It refuses to hyperlink a section it cannot confirm |
+| 3 | Switch **Language → हिंदी**, ask again | Answer in Hindi; statute names stay in English so you can search them. `lang` is set per answer so screen readers pronounce it correctly |
+| 4 | Open the **Legal Registry** tab, search `deposit` | The 10 Acts / 55 sections every citation is checked against, with pre-2024 IPC/CrPC equivalents |
+| 5 | **Upload Document** tab, drop any PDF | Parsed **in your browser** — the file is never uploaded. Only extracted text is sent |
+| 6 | Press **Tab** repeatedly from the top | Skip link first, then every control reachable with a visible focus ring |
+| 7 | Disable JavaScript and ask a question | Still works. The form is a real GET form the server honours |
+
+---
+
+## Evaluation standards audit
+
+### 1. Code Quality
+Knowledge is **data, not code**: Acts, sections, plain-language text and scenario answers live in `lib/legal-db.ts` and `lib/scenarios.ts`, so a lawyer can correct a section without reading React. One concern per module — `lib/citations.ts` (verification), `lib/llm.ts` (providers), `lib/doc-extract.ts` (parsing), `lib/rate-limit.ts`. TypeScript **strict**, ESLint clean, no `any` in application code. Comments explain *why*, not *what*.
+
+### 2. Security
+`npm audit` = **0 vulnerabilities**, achieved by removing the Vercel AI SDK (filetype-bypass advisory, plus `jsondiffpatch` XSS/prototype-pollution) in favour of ~150 lines we own. Strict CSP with no `unsafe-eval`; **no `dangerouslySetInnerHTML` anywhere** (lint-enforced). Uploaded documents are read in-browser and never touch a server disk. File type decided by **magic bytes**, not by the attacker-controlled extension. Per-IP rate limits on both routes. API keys are server-side only — CI asserts no credential shape reaches the client bundle and that `process.env` is never read from a client component. Documents are fenced with a per-request UUID so text inside them cannot act as instructions.
+
+### 3. Efficiency
+Gemini's reasoning phase is disabled (`thinkingBudget: 0`): it was spending 94 of 100 tokens thinking and pushing answers past 200s. `pdfjs` and `mammoth` are dynamically imported so the initial bundle excludes them. Static shell, streamed answers. `output: "standalone"` for a minimal container. Citation verification is regex over a few KB — no extra model call.
+
+### 4. Testing
+**80 tests**, `npm test`, no mocked models anywhere. Concentrated where a defect would harm someone: citation verification (a fabricated section *must* be refused), registry integrity (every BNS/BNSS entry must record its IPC/CrPC predecessor), the pre-written answers (**every citation in them must verify**), scenario matching (must *refuse* to match on one weak keyword), and the rate limiter. Plus a ReDoS guard on adversarial input. CI runs types, lint, tests and build on Node 20 and 22, with a security job on every push.
+
+### 5. Accessibility
+**WCAG 2.2 AA.** Full ARIA tab pattern (arrow keys, `aria-selected`, roving `tabindex`). `aria-live` on the streaming answer, and focus moves to it on completion. Citation status uses **icon + text + colour**, never colour alone. `lang` set per answer so Hindi and Tamil are pronounced correctly rather than read as mispronounced English. Native `<dialog>` for focus trapping. `aria-disabled` rather than `disabled` on busy buttons. Helplines are `tel:` links. AA contrast in light *and* dark, `prefers-reduced-motion`, `forced-colors`, zoom never disabled. **Everything works with JavaScript off.**
+
+### 6. Problem Statement Alignment
+The brief asks for legal *information*, not advice — enforced structurally, not by disclaimer. A hallucinated section number is the specific harm this domain invites, and the brief's own requirement to link each citation to India Code would give a fabrication the authority of the State. So every citation is verified before display, and unconfirmed ones are never hyperlinked. Simplification, comparison against a registry, risk flags, actionable checklists, multilingual access and NALSA free-legal-aid routing are all present. It runs **without any API key**, because the people who need this most are least likely to have one.
+
+---
+
 ## The problem
 
 A tenant whose deposit is being withheld, a woman being beaten by her in-laws, a
