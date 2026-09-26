@@ -13,6 +13,13 @@ citation is checked against a registry of Indian statutes before you see it.**
 ![WCAG 2.2 AA](https://img.shields.io/badge/WCAG-2.2%20AA-blue)
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue)
 
+**▶ Live demo: https://adhikar-eight.vercel.app**
+
+No sign-up, no API key needed. The five situation cards return complete answers
+with verified citations straight away; to get answers tailored to your own
+question, paste a free Google AI Studio key into the panel on the page — it stays
+in your browser and is never stored on the server.
+
 ```bash
 git clone https://github.com/AkTyzon/adhikar && cd adhikar
 npm install
@@ -253,7 +260,7 @@ than rendered as confident links to a government archive.
 
 ## Deployment
 
-### Free, no card required (recommended)
+### Free, no card required (how the live demo is hosted)
 
 ```bash
 npx vercel --prod
