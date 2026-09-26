@@ -16,7 +16,13 @@ import type { NextConfig } from "next";
  */
 const CSP = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'strict-dynamic'",
+  // NOT 'strict-dynamic'. It makes browsers ignore 'self' and 'unsafe-inline'
+  // and execute only scripts carrying a valid nonce or hash -- and Next emits no
+  // nonce by default, so every script was served 200 and then refused by the
+  // browser. The page rendered, hydration never ran, and no button worked.
+  // Caught only by opening it in a real browser; curl fetches HTML and neither
+  // executes scripts nor enforces CSP, so every earlier check passed.
+  "script-src 'self' 'unsafe-inline'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob:",
   "font-src 'self' data:",
