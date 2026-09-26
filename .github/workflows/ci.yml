@@ -69,16 +69,31 @@ jobs:
           fi
           echo "No credential-shaped strings found."
 
-      - name: Assert API keys never reach the client bundle
-        # A key read in a client component would be inlined into JavaScript served
-        # to every visitor. This is the check that would catch it.
+      - name: Assert no credential VALUE reaches the client bundle
+        # Greps for the shapes real keys take, not for variable names.
+        #
+        # An earlier version searched for the names and failed the build: the UI
+        # legitimately prints "set OPENAI_API_KEY in .env.local" as help text when
+        # no model is configured, so the name appearing in the bundle is correct
+        # and expected. What must never appear is a key's value.
         run: |
           npm run build
-          if grep -rlE 'GOOGLE_GENERATIVE_AI_API_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY' .next/static 2>/dev/null; then
-            echo "::error::An API key name appears in the client bundle"
+          if grep -rlE '(AIza[0-9A-Za-z_-]{30,}|sk-ant-[A-Za-z0-9-]{20,}|sk-proj-[A-Za-z0-9-]{20,}|sk-[A-Za-z0-9]{32,})' .next/static 2>/dev/null; then
+            echo "::error::A credential-shaped string appears in the client bundle"
             exit 1
           fi
-          echo "No provider key names in the client bundle."
+          echo "No credential values in the client bundle."
+
+      - name: Assert env vars are only read on the server
+        # process.env must not be reachable from a "use client" module: Next would
+        # inline the value at build time and serve it to every visitor.
+        run: |
+          offenders=$(grep -rln 'process\.env' components/ 2>/dev/null || true)
+          if [ -n "$offenders" ]; then
+            echo "::error::process.env read from a client component: $offenders"
+            exit 1
+          fi
+          echo "No process.env reads in client components."
 
       - name: Assert dangerouslySetInnerHTML is absent
         run: |
