@@ -1,0 +1,16 @@
+# Never upload local secrets. The deployed instance runs without a key by design:
+# the scenario cards still serve verified answers, and a visitor can supply their
+# own key through the interface.
+.env
+.env.local
+.env*.local
+
+node_modules
+.next
+tests
+.git
+.github
+docs
+*.md
+!README.md
+coverage

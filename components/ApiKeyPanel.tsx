@@ -51,8 +51,13 @@ export function ApiKeyPanel({ onChange }: { onChange: (key: string | null) => vo
 
   function save() {
     const key = value.trim();
-    if (!/^AIza[0-9A-Za-z_-]{30,60}$/.test(key)) {
-      setError("That does not look like a Google AI Studio key. They begin with “AIza”.");
+    // Google issues keys in an "AIza…" form and a newer "AQ.…" form; both are
+    // valid and an earlier check accepted only the first.
+    const plausible =
+      !/\s/.test(key) &&
+      (/^AIza[0-9A-Za-z_-]{30,60}$/.test(key) || /^AQ\.[0-9A-Za-z_.-]{20,120}$/.test(key));
+    if (!plausible) {
+      setError("That does not look like a Google AI Studio key. They begin with “AIza” or “AQ.”.");
       return;
     }
     setError(null);
@@ -109,9 +114,9 @@ export function ApiKeyPanel({ onChange }: { onChange: (key: string | null) => vo
       {saved ? (
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <code className="rounded bg-navy-100 px-2 py-1 font-mono text-xs dark:bg-navy-800">
-            {/* Only the last four characters, so the field can be recognised
-                without the secret being readable over someone's shoulder. */}
-            AIza…{saved.slice(-4)}
+            {/* Prefix and last four only, so the field can be recognised without
+                the secret being readable over someone's shoulder. */}
+            {saved.slice(0, 4)}…{saved.slice(-4)}
           </code>
           <Button variant="ghost" onClick={clear} className="px-2 py-1 text-xs">
             <Trash2 className="size-3.5" aria-hidden="true" />

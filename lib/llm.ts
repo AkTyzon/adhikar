@@ -145,9 +145,22 @@ export interface KeyOverride {
   gemini?: string;
 }
 
-/** Shape check only -- no network call. Google AI Studio keys start "AIza". */
+/**
+ * Shape check only -- no network call, and deliberately permissive.
+ *
+ * Google issues API keys in at least two formats: the long-standing `AIza…` form
+ * and a newer `AQ.…` form. An earlier version accepted only the first and
+ * silently rejected a valid key of the second kind, which presented as the
+ * bring-your-own-key field refusing a key that worked perfectly server-side.
+ *
+ * The purpose here is to catch a pasted typo or a stray word before it costs an
+ * upstream round trip -- not to authenticate. Only the API can do that, so
+ * anything of plausible shape is passed through.
+ */
 export function looksLikeGeminiKey(value: string): boolean {
-  return /^AIza[0-9A-Za-z_-]{30,60}$/.test(value.trim());
+  const key = value.trim();
+  if (/\s/.test(key)) return false;
+  return /^AIza[0-9A-Za-z_-]{30,60}$/.test(key) || /^AQ\.[0-9A-Za-z_.-]{20,120}$/.test(key);
 }
 
 export function resolveProvider(

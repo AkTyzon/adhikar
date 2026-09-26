@@ -9,7 +9,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { buildEndpoint, createReasoningStripper, resolveProvider } from "../lib/llm";
+import { buildEndpoint, createReasoningStripper, looksLikeGeminiKey, resolveProvider } from "../lib/llm";
 
 const NONE = {} as NodeJS.ProcessEnv;
 const env = (extra: Record<string, string>) => extra as unknown as NodeJS.ProcessEnv;
@@ -145,5 +145,42 @@ describe("reasoning suppression in the stream", () => {
     const strip = createReasoningStripper();
     const chunks = ["visible ", "<think>", "a", "b", "c", "</think>", "more"];
     assert.equal(chunks.map(strip).join(""), "visible more");
+  });
+});
+
+describe("bring-your-own-key validation", () => {
+  it("accepts the long-standing AIza format", () => {
+    assert.ok(looksLikeGeminiKey("AIzaSyB" + "x".repeat(32)));
+  });
+
+  it("accepts the newer AQ. format", () => {
+    // A real key in this format was rejected by an AIza-only check, so the
+    // bring-your-own-key field refused a key that worked server-side.
+    assert.ok(looksLikeGeminiKey("AQ.Ab8RN6J" + "x".repeat(40)));
+  });
+
+  it("rejects obvious non-keys without calling the API", () => {
+    for (const bad of ["", "not-a-key", "AIza short", "sk-ant-abc", "   "]) {
+      assert.equal(looksLikeGeminiKey(bad), false, `accepted ${JSON.stringify(bad)}`);
+    }
+  });
+
+  it("rejects a value containing whitespace", () => {
+    // A pasted key with a stray newline is the common accident.
+    assert.equal(looksLikeGeminiKey("AIzaSyB" + "x".repeat(32) + " extra"), false);
+  });
+
+  it("selects the visitor's key over every configured provider", () => {
+    const provider = resolveProvider(
+      env({ ADHIKAR_LOCAL_MODEL: "qwen3:8b", GEMINI_API_KEY: "server-key" }),
+      { gemini: "AQ.Ab8RN6J" + "x".repeat(40) },
+    );
+    assert.equal(provider?.id, "google");
+    assert.match(provider?.label ?? "", /your key/);
+  });
+
+  it("ignores an implausible override rather than forwarding it", () => {
+    const provider = resolveProvider(env({ GEMINI_API_KEY: "server-key" }), { gemini: "junk" });
+    assert.equal(provider?.label, "Google Gemini");
   });
 });

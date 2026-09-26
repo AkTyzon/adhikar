@@ -62,7 +62,7 @@ jobs:
 
       - name: Assert no secrets are committed
         run: |
-          if git grep -nIE '(sk-ant-[A-Za-z0-9]{20,}|sk-proj-[A-Za-z0-9]{20,}|AIza[0-9A-Za-z_-]{30,})' \
+          if git grep -nIE '(sk-ant-[A-Za-z0-9]{20,}|sk-proj-[A-Za-z0-9]{20,}|AIza[0-9A-Za-z_-]{30,}|AQ\\.[A-Za-z0-9_.-]{30,})' \
                -- ':!*.md' ':!.env.example'; then
             echo "::error::A credential-shaped string is present in the tree"
             exit 1
@@ -78,7 +78,7 @@ jobs:
         # and expected. What must never appear is a key's value.
         run: |
           npm run build
-          if grep -rlE '(AIza[0-9A-Za-z_-]{30,}|sk-ant-[A-Za-z0-9-]{20,}|sk-proj-[A-Za-z0-9-]{20,}|sk-[A-Za-z0-9]{32,})' .next/static 2>/dev/null; then
+          if grep -rlE '(AIza[0-9A-Za-z_-]{30,}|AQ\\.[A-Za-z0-9_.-]{30,}|sk-ant-[A-Za-z0-9-]{20,}|sk-proj-[A-Za-z0-9-]{20,}|sk-[A-Za-z0-9]{32,})' .next/static 2>/dev/null; then
             echo "::error::A credential-shaped string appears in the client bundle"
             exit 1
           fi
