@@ -251,6 +251,49 @@ withheld deposit, qwen3:8b cited "Section 107 of the Model Tenancy Act" and
 real provisions are s.11 and s.12 — and both were flagged **unverified** rather
 than rendered as confident links to a government archive.
 
+## Deployment
+
+Containerised and ready for Cloud Run, the same way EcoVerse is hosted.
+
+```bash
+PROJECT=your-project-id
+REGION=us-central1
+
+gcloud config set project $PROJECT
+gcloud services enable run.googleapis.com artifactregistry.googleapis.com cloudbuild.googleapis.com secretmanager.googleapis.com
+
+# Keep the key out of the image and out of the deploy command's history.
+printf '%s' "YOUR_GEMINI_KEY" | gcloud secrets create GEMINI_API_KEY --data-file=-
+gcloud projects add-iam-policy-binding $PROJECT \
+  --member="serviceAccount:$(gcloud projects describe $PROJECT --format='value(projectNumber)')-compute@developer.gserviceaccount.com" \
+  --role="roles/secretmanager.secretAccessor"
+
+# Builds from the Dockerfile in Cloud Build, so no local Docker is needed and the
+# linux/amd64 cross-build is handled for you.
+gcloud run deploy adhikar \
+  --source . \
+  --region $REGION \
+  --allow-unauthenticated \
+  --set-secrets="GEMINI_API_KEY=GEMINI_API_KEY:latest" \
+  --memory=1Gi \
+  --cpu=1 \
+  --min-instances=0
+```
+
+The image is multi-stage, runs as an unprivileged user, carries no source or dev
+dependencies, and listens on Cloud Run's injected `PORT`.
+
+**A deployment does not need a key at all.** Without one the scenario cards still
+serve verified answers, and a visitor can supply their own key in the interface —
+which is the point of the bring-your-own-key panel.
+
+### Other hosts
+
+```bash
+npx vercel --prod          # native Next.js host, free tier
+docker build -t adhikar . && docker run -p 8080:8080 adhikar
+```
+
 ## Limitations
 
 Stated plainly, because a tool that hides its failure modes is the problem it
