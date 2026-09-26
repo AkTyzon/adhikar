@@ -102,7 +102,10 @@ const CITATION_PATTERNS: readonly RegExp[] = [
     "gi",
   ),
   new RegExp(
-    String.raw`\b(${ACT_NAME_ALTERNATION})\b(?:,?\s*\d{4})?[\s,]*(?:sections?|sec\.?|s\.)\s*(${SECTION_NUMBER})`,
+    // Allows an opening bracket before the keyword: "Model Tenancy Act, 2021
+    // (Section 11)" is a format models produce constantly, and without this the
+    // citation was missed entirely and the answer reported as uncited.
+    String.raw`\b(${ACT_NAME_ALTERNATION})\b(?:,?\s*\d{4})?[\s,]*[([]?\s*(?:sections?|sec\.?|s\.)\s*(${SECTION_NUMBER})`,
     "gi",
   ),
   // Catch-all for statutes the registry does not know. Requires a statute-like

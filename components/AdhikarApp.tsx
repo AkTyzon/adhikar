@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BookOpen, FileText, MessagesSquare } from "lucide-react";
 
+import { ApiKeyPanel } from "@/components/ApiKeyPanel";
 import { DisclaimerModal } from "@/components/DisclaimerModal";
 import { DocumentUploader } from "@/components/DocumentUploader";
 import { EmergencyBar } from "@/components/EmergencyBar";
@@ -37,6 +38,8 @@ export function AdhikarApp({ providerLabel, initialQuestion }: AdhikarAppProps) 
   const [error, setError] = useState<string | null>(null);
   const [streaming, setStreaming] = useState(false);
   const [aidOpen, setAidOpen] = useState(false);
+  // A key the visitor supplied in this browser, forwarded as a header per request.
+  const [byoKey, setByoKey] = useState<string | null>(null);
 
   // Retained so a second question cancels the first rather than interleaving two
   // streams into the same buffer.
@@ -57,7 +60,12 @@ export function AdhikarApp({ providerLabel, initialQuestion }: AdhikarAppProps) 
       try {
         const response = await fetch(endpoint, {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: {
+            "content-type": "application/json",
+            // Sent per request rather than held server-side, so the key never
+            // outlives the question it was used for.
+            ...(byoKey ? { "x-gemini-api-key": byoKey } : {}),
+          },
           body: JSON.stringify(body),
           signal: controller.signal,
         });
@@ -109,7 +117,7 @@ export function AdhikarApp({ providerLabel, initialQuestion }: AdhikarAppProps) 
         answerRef.current?.focus();
       }
     },
-    [],
+    [byoKey],
   );
 
   const ask = useCallback(
@@ -172,12 +180,18 @@ export function AdhikarApp({ providerLabel, initialQuestion }: AdhikarAppProps) 
           </p>
         </div>
 
+        {providerLabel === null || byoKey ? (
+          <div className="mb-6">
+            <ApiKeyPanel onChange={setByoKey} />
+          </div>
+        ) : null}
+
         <HeroSearch
           question={question}
           onQuestionChange={setQuestion}
           onSubmit={ask}
           busy={streaming}
-          providerLabel={providerLabel}
+          providerLabel={byoKey ? "Google Gemini · gemini-flash-latest (your key)" : providerLabel}
         />
 
         <div className="mt-8">

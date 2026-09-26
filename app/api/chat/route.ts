@@ -10,6 +10,7 @@ import { NextResponse } from "next/server";
 
 import { buildChatSystemPrompt } from "@/lib/ai-prompt";
 import { isLanguageCode } from "@/lib/languages";
+import { readKeyOverride } from "@/lib/byo-key";
 import { ProviderError, resolveProvider, streamCompletion } from "@/lib/llm";
 import { RateLimiter, clientKey } from "@/lib/rate-limit";
 import { matchScenario } from "@/lib/scenarios";
@@ -49,7 +50,7 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const languageCode = isLanguageCode(language) ? language : "en";
-  const provider = resolveProvider();
+  const provider = resolveProvider(process.env, readKeyOverride(request));
 
   // No key configured: serve a pre-written answer when the situation is a clear
   // match, and say so plainly when it is not. Never a generic guess.
@@ -84,6 +85,26 @@ export async function POST(request: Request): Promise<Response> {
   } catch (error) {
     if (error instanceof ProviderError) {
       console.error("[chat] provider failure", error.message);
+
+      // The model is unreachable, but this question may be one of the five
+      // situations Adhikar answers from human-checked text. Serving that beats an
+      // error page: someone who has just been assaulted needs the helpline and the
+      // PWDVA sections, not an apology about upstream capacity.
+      const scenario = matchScenario(question);
+      if (scenario) {
+        return NextResponse.json(
+          {
+            mode: "fallback",
+            answer: scenario.fallbackAnswer,
+            scenarioId: scenario.id,
+            notice:
+              "The AI model is unavailable right now, so this is Adhikar's pre-written answer for " +
+              "this situation. Every section cited in it is verified against the registry.",
+          },
+          { status: 200 },
+        );
+      }
+
       return NextResponse.json({ error: error.safeDetail }, { status: error.status });
     }
     console.error("[chat] unexpected failure", error);

@@ -78,6 +78,11 @@ const DEFAULT_MAX_TOKENS = 4096;
  * 60-second ceiling aborted it mid-sentence. An idle watchdog kills a genuinely
  * hung stream while letting a slow but live one finish.
  */
+/** Upstream statuses worth trying again: transient by definition. */
+const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504]);
+const MAX_ATTEMPTS = 3;
+const RETRY_BASE_MS = 600;
+
 const SETUP_TIMEOUT_MS = 30_000;
 const IDLE_TIMEOUT_MS = 45_000;
 /**
@@ -89,6 +94,16 @@ const IDLE_TIMEOUT_MS = 45_000;
 const LOCAL_SETUP_TIMEOUT_MS = 120_000;
 const LOCAL_IDLE_TIMEOUT_MS = 180_000;
 
+/**
+ * Gemini model.
+ *
+ * Pinned rather than using the `-latest` alias. `gemini-2.5-flash` now returns
+ * 404 "no longer available to new users", and Google's own error names this as the
+ * replacement, so pinning it makes the failure mode a deliberate version bump
+ * rather than a silent change under the application.
+ */
+const DEFAULT_GEMINI_MODEL = "gemini-3.8-flash";
+
 /** Default endpoint for Ollama's OpenAI-compatible API. */
 const DEFAULT_LOCAL_BASE_URL = "http://127.0.0.1:11434/v1";
 
@@ -99,7 +114,41 @@ const DEFAULT_LOCAL_BASE_URL = "http://127.0.0.1:11434/v1";
  * names it, then OpenAI, then Anthropic. Returns undefined when no key is set,
  * which is a supported state and not an error.
  */
-export function resolveProvider(env: NodeJS.ProcessEnv = process.env): ProviderConfig | undefined {
+/**
+ * A key supplied by the visitor rather than by the deployment.
+ *
+ * Lets someone evaluating a deployed instance use their own Gemini key without
+ * the operator having to provision one, which is what makes a public demo usable
+ * when the server has no credentials of its own.
+ *
+ * The key is used for exactly one upstream request and then discarded: never
+ * logged, never stored, never echoed back in a response.
+ */
+export interface KeyOverride {
+  gemini?: string;
+}
+
+/** Shape check only -- no network call. Google AI Studio keys start "AIza". */
+export function looksLikeGeminiKey(value: string): boolean {
+  return /^AIza[0-9A-Za-z_-]{30,60}$/.test(value.trim());
+}
+
+export function resolveProvider(
+  env: NodeJS.ProcessEnv = process.env,
+  override?: KeyOverride,
+): ProviderConfig | undefined {
+  // A visitor's own key wins over everything, including a local model: they asked
+  // for their key to be used, and silently ignoring it would be worse than not
+  // offering the option.
+  if (override?.gemini && looksLikeGeminiKey(override.gemini)) {
+    return {
+      id: "google",
+      label: "Google Gemini (your key)",
+      model: env.ADHIKAR_MODEL ?? DEFAULT_GEMINI_MODEL,
+      apiKey: override.gemini.trim(),
+    };
+  }
+
   // Local first. Configuring an on-device model is a deliberate privacy choice,
   // and it should not be silently overridden by a cloud key left in the
   // environment from something else.
@@ -123,12 +172,16 @@ export function resolveProvider(env: NodeJS.ProcessEnv = process.env): ProviderC
     };
   }
 
-  if (env.GOOGLE_GENERATIVE_AI_API_KEY) {
+  // GEMINI_API_KEY first, matching the convention used across these projects;
+  // the other two names are accepted so an existing environment keeps working.
+  const geminiKey =
+    env.GEMINI_API_KEY ?? env.GOOGLE_API_KEY ?? env.GOOGLE_GENERATIVE_AI_API_KEY;
+  if (geminiKey) {
     return {
       id: "google",
       label: "Google Gemini",
-      model: env.ADHIKAR_MODEL ?? "gemini-2.0-flash",
-      apiKey: env.GOOGLE_GENERATIVE_AI_API_KEY,
+      model: env.ADHIKAR_MODEL ?? DEFAULT_GEMINI_MODEL,
+      apiKey: geminiKey,
     };
   }
   if (env.OPENAI_API_KEY) {
@@ -291,6 +344,7 @@ interface AnthropicChunk {
 export async function streamCompletion(
   provider: ProviderConfig,
   request: CompletionRequest,
+  attempt = 1,
 ): Promise<ReadableStream<Uint8Array>> {
   const endpoint = buildEndpoint(provider, request);
 
@@ -332,12 +386,40 @@ export async function streamCompletion(
     // Read the body for the log, but never forward it: provider errors can echo
     // request content and occasionally key metadata.
     const detail = await upstream.text().catch(() => "");
+
+    if (RETRYABLE_STATUSES.has(upstream.status) && attempt < MAX_ATTEMPTS) {
+      // Hosted models return 503 "high demand" under load often enough that a
+      // single attempt makes a live demo unreliable. Backoff is exponential with
+      // a jitter, so concurrent visitors do not retry in lockstep.
+      const delay = RETRY_BASE_MS * 2 ** (attempt - 1) + Math.random() * 250;
+      console.warn(
+        `[llm:${provider.id}] ${upstream.status} on attempt ${attempt}; retrying in ${Math.round(delay)}ms`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      return streamCompletion(provider, request, attempt + 1);
+    }
+
+    // Streaming has run out of attempts. For Gemini there is a more reliable
+    // non-streaming endpoint; try it before giving up on the answer entirely.
+    if (provider.id === "google") {
+      console.warn(`[llm:google] streaming failed with ${upstream.status}; trying non-streaming`);
+      try {
+        return await geminiWithoutStreaming(provider, request);
+      } catch (fallbackError) {
+        console.error("[llm:google] non-streaming fallback also failed", fallbackError);
+      }
+    }
+
     throw new ProviderError(
       `${provider.id} returned ${upstream.status}: ${detail.slice(0, 500)}`,
-      upstream.status === 429 ? 429 : 502,
+      // Mirror the upstream's meaning: a transient overload is not a rejection,
+      // and telling the user their request was "rejected" would be wrong.
+      upstream.status === 429 ? 429 : upstream.status === 503 ? 503 : 502,
       upstream.status === 429
         ? "The AI service is rate limited right now. Please try again in a moment."
-        : "The AI service rejected this request.",
+        : upstream.status === 503
+          ? "The AI model is busy right now. Please try again in a few seconds."
+          : "The AI service rejected this request.",
     );
   }
 
@@ -501,6 +583,66 @@ function toTextStream(
       // alternative is losing a complete response to one bad frame.
     }
   }
+}
+
+/**
+ * Fetch a Gemini completion in one shot and present it as a single-chunk stream.
+ *
+ * Google's `streamGenerateContent` endpoint proved materially less reliable than
+ * `generateContent` with the same key and prompt -- returning 503 "high demand"
+ * and bare 404s minutes apart while the non-streaming endpoint answered normally.
+ * Losing the typewriter effect is a far smaller cost than losing the answer, so
+ * this runs when streaming has exhausted its retries.
+ */
+async function geminiWithoutStreaming(
+  provider: ProviderConfig,
+  request: CompletionRequest,
+): Promise<ReadableStream<Uint8Array>> {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+    provider.model,
+  )}:generateContent`;
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-goog-api-key": provider.apiKey },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: request.system }] },
+      contents: [{ role: "user", parts: [{ text: request.user }] }],
+      generationConfig: {
+        maxOutputTokens: request.maxTokens ?? DEFAULT_MAX_TOKENS,
+        temperature: 0.3,
+      },
+    }),
+    signal: AbortSignal.timeout(provider.setupTimeoutMs ?? SETUP_TIMEOUT_MS),
+  });
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw new ProviderError(
+      `google non-streaming returned ${response.status}: ${detail.slice(0, 500)}`,
+      response.status === 429 ? 429 : 503,
+      "The AI model is busy right now. Please try again in a few seconds.",
+    );
+  }
+
+  const payload = (await response.json()) as {
+    candidates?: { content?: { parts?: { text?: string }[] } }[];
+  };
+  const text = (payload.candidates?.[0]?.content?.parts ?? [])
+    .map((part) => part.text ?? "")
+    .join("");
+
+  if (!text.trim()) {
+    throw new ProviderError("google returned an empty completion", 502, "The AI service returned nothing.");
+  }
+
+  const encoder = new TextEncoder();
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(encoder.encode(text));
+      controller.close();
+    },
+  });
 }
 
 /**

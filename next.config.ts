@@ -34,6 +34,9 @@ const CSP = [
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // Emits a self-contained server with only the files actually imported, which is
+  // what keeps the Cloud Run image small and its cold start short.
+  output: "standalone",
   // The framework version is not something a visitor needs, and it tells an
   // attacker which advisories to try.
   poweredByHeader: false,

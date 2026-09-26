@@ -11,6 +11,7 @@ import { NextResponse } from "next/server";
 
 import { buildDocumentSystemPrompt, buildDocumentUserPrompt } from "@/lib/ai-prompt";
 import { isLanguageCode } from "@/lib/languages";
+import { readKeyOverride } from "@/lib/byo-key";
 import { ProviderError, resolveProvider, streamCompletion } from "@/lib/llm";
 import { RateLimiter, clientKey } from "@/lib/rate-limit";
 
@@ -65,7 +66,7 @@ export async function POST(request: Request): Promise<Response> {
   const userQuestion =
     typeof question === "string" && question.trim().length > 4 ? question.trim().slice(0, 1_000) : DEFAULT_QUESTION;
 
-  const provider = resolveProvider();
+  const provider = resolveProvider(process.env, readKeyOverride(request));
   if (!provider) {
     return NextResponse.json(
       {
